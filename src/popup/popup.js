@@ -1,4 +1,4 @@
-// Toolbar popup: picks the player style. Open NTS tabs update straight away (via bridge.js).
+// Better NTS: toolbar popup. Picks the player style; open NTS tabs update straight away (via settings-bridge.js).
 (() => {
   'use strict';
 

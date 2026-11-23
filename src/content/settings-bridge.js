@@ -1,0 +1,74 @@
+// Better NTS: settings bridge
+//
+// Runs in the extension's isolated world at document_start. It can use extension storage, which
+// player.js (in the page's world) can't. It keeps <html data-bnts-mode="..."> in sync with the
+// "player style" setting, which the toolbar popup and the player's own menu both change.
+
+(() => {
+  'use strict';
+
+  const api = globalThis.browser || globalThis.chrome;
+  const MODES = ['original', 'enhanced', 'redesign'];
+  const DEFAULT_MODE = 'enhanced';
+  const STORAGE_KEY = 'mode'; // extension storage
+  const CACHE_KEY = 'better-nts:mode'; // nts.live localStorage, so the mode applies before the first paint
+  const root = document.documentElement;
+
+  // Versions before the rename to "Better NTS" used other localStorage keys: move them over once.
+  function migrateOldKeys() {
+    const renamed = {
+      'nts-tracklist-seek:mode': 'better-nts:mode',
+      'nts-tracklist-seek:volume': 'better-nts:volume',
+      'nts-tracklist-seek:muted': 'better-nts:muted',
+      'nts-tracklist-seek:drawer-tab': 'better-nts:drawer-tab',
+    };
+    try {
+      for (const [oldKey, newKey] of Object.entries(renamed)) {
+        const value = localStorage.getItem(oldKey);
+        if (value === null) continue;
+        if (localStorage.getItem(newKey) === null) localStorage.setItem(newKey, value);
+        localStorage.removeItem(oldKey);
+      }
+      localStorage.removeItem('nts-tracklist-seek:playback-rate'); // the speed control was removed
+    } catch (e) {
+      /* storage blocked: nothing to migrate */
+    }
+  }
+
+  function apply(mode) {
+    const value = MODES.includes(mode) ? mode : DEFAULT_MODE;
+    if (root.dataset.bntsMode !== value) root.dataset.bntsMode = value;
+    try {
+      localStorage.setItem(CACHE_KEY, value);
+    } catch (e) {
+      /* storage blocked: the mode still applies, it just isn't cached */
+    }
+  }
+
+  migrateOldKeys();
+
+  let cached = null;
+  try {
+    cached = localStorage.getItem(CACHE_KEY);
+  } catch (e) {
+    cached = null;
+  }
+  apply(cached);
+
+  api.storage.local.get(STORAGE_KEY).then((stored) => {
+    if (stored && MODES.includes(stored[STORAGE_KEY])) apply(stored[STORAGE_KEY]);
+    else api.storage.local.set({ [STORAGE_KEY]: root.dataset.bntsMode });
+  });
+
+  api.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[STORAGE_KEY]) apply(changes[STORAGE_KEY].newValue);
+  });
+
+  // The "Player style" menu inside the player asks for a change with this event.
+  document.addEventListener('bnts:set-mode', (event) => {
+    const mode = event.detail;
+    if (!MODES.includes(mode)) return;
+    apply(mode);
+    api.storage.local.set({ [STORAGE_KEY]: mode });
+  });
+})();

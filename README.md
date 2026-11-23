@@ -1,4 +1,4 @@
-# NTS Tracklist Seek
+# Better NTS
 
 Browser extension that improves the episode player on [nts.live](https://www.nts.live). Not affiliated with NTS.
 
@@ -26,3 +26,7 @@ Not on the extension stores, so load it yourself.
 3. Click "Load Temporary Add-on" and pick `manifest.json`.
 
 Firefox removes temporary add-ons when it closes. To keep it installed you need to sign it through [addons.mozilla.org](https://addons.mozilla.org/developers/) (it can be unlisted).
+
+## Contributing
+
+Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how the code is laid out.

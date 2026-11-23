@@ -1,4 +1,4 @@
-// NTS Tracklist Seek
+// Better NTS: page script
 //
 // Makes NTS's episode player more useful:
 //   - The full tracklist in the player, in a scrollable list that follows the current track.
@@ -19,12 +19,36 @@
 //
 // This script runs in the page's own JavaScript world (manifest "world": "MAIN") so it can use
 // NTS's own "Save track" logic. Everything it adds reuses NTS's own class names, so it looks native.
+// Our own classes, attributes and CSS variables all start with "bnts".
+//
+// It's one file on purpose: content scripts in the page's world can't use modules, and splitting it
+// would mean a build step or globals on NTS's page. Sections, in order:
+//
+//   constants              selectors, timings, storage keys, icons
+//   small helpers          DOM building, time formatting, text matching
+//   the episode player     finding NTS's <audio>, episode, duration
+//   player style (mode)    original / enhanced / redesign, and removing everything for "original"
+//   seeking                jumping to a time, robust against NTS's resume logic
+//   volume                 the episode volume control
+//   tracklist data         loading the tracklist from NTS's API
+//   NTS's React app        reaching NTS's Redux store
+//   save track             running NTS's own save button code for any track
+//   snackbar, popovers     messages, menus and the shortcuts panel
+//   the episode's tracks   which track is playing, previous / next
+//   the full tracklist     the list, filter, track menu, save buttons, following the current track
+//   previous / next        buttons next to NTS's ±30s buttons
+//   progress bar           track markers and the hover preview
+//   redesign               full-width bar and side drawer
+//   media keys             lock screen / media session
+//   links with ?t=         starting an episode at a time
+//   keyboard shortcuts
+//   events                 event listeners and sync(), which keeps everything in place
 
 (() => {
   'use strict';
 
-  if (window.__ntsTracklistSeek) return;
-  window.__ntsTracklistSeek = true;
+  if (window.__betterNts) return;
+  window.__betterNts = true;
 
   // ------------------------------------------------------------------ constants
 
@@ -33,7 +57,7 @@
     openPlayer: '.footer-player--episode-player.footer-player--open',
     tracklist: '.episode-player-tracklist',
     ntsRow: '.episode-player-tracklist > .episode-player-tracklist__track',
-    ntsSaveButton: '.save-track-button:not(.nts-seek-save)',
+    ntsSaveButton: '.save-track-button:not(.bnts-save)',
     promo: '.episode-player-tracklist__promo',
     time: '.episode-player-tracklist__time',
     artist: '.episode-player-tracklist__artist',
@@ -44,15 +68,19 @@
     progressBar: '.soundcloud-player__progress-bar',
     playButton: 'button.soundcloud-player__play-button',
     skipGroup: '.episode-player__skip',
-    ntsSkipButton: '.episode-player__skip-button:not(.nts-seek-control)',
+    ntsSkipButton: '.episode-player__skip-button:not(.bnts-control)',
     radioAudio: '#nts-player-audio',
   };
 
-  const LIST_ACTIVE = 'nts-seek-full-active'; // on NTS's list while ours replaces its 3 rows
+  const LIST_ACTIVE = 'bnts-full-active'; // on NTS's list while ours replaces its 3 rows
   const PLAYING = 'episode-player-tracklist__track--is-playing'; // NTS's "now playing" row style
 
-  const VOLUME_KEY = 'nts-tracklist-seek:volume';
-  const MUTED_KEY = 'nts-tracklist-seek:muted';
+  // localStorage keys (nts.live's storage). settings-bridge.js moves over keys from older versions.
+  const VOLUME_KEY = 'better-nts:volume';
+  const MUTED_KEY = 'better-nts:muted';
+  const MODE_CACHE_KEY = 'better-nts:mode';
+  const TAB_KEY = 'better-nts:drawer-tab';
+
   const VOLUME_STEP = 0.05;
   const SKIP_SECONDS = 30; // same as NTS's own skip buttons
   const PREV_RESTARTS_AFTER = 3; // "previous" restarts the current track after this many seconds
@@ -61,15 +89,13 @@
   const EPISODE_PATH = /^(?:https?:\/\/[^/]+)?(\/shows\/([^/?#]+)\/episodes\/([^/?#]+))/;
   const REACT_KEY = /^__react(?:Fiber|InternalInstance)\$/;
 
-  // Player style, set by the toolbar popup or the "Player style" menu (stored by bridge.js):
+  // Player style, set by the toolbar popup or the "Player style" menu (stored by settings-bridge.js):
   //   original: NTS untouched   enhanced: NTS's layout + features   redesign: + full-width bar and side drawer
   const MODES = [
     { id: 'original', label: 'Original NTS' },
     { id: 'enhanced', label: 'Enhanced' },
     { id: 'redesign', label: 'Redesign' },
   ];
-  const MODE_CACHE_KEY = 'nts-tracklist-seek:mode';
-  const TAB_KEY = 'nts-tracklist-seek:drawer-tab';
 
   // NTS's own icons (taken from nts.live) plus a few in the same style.
   const ICON = {
@@ -295,7 +321,7 @@
   // ------------------------------------------------------------------ player style (mode)
 
   function getMode() {
-    let mode = document.documentElement.dataset.ntsSeekMode;
+    let mode = document.documentElement.dataset.bntsMode;
     if (!mode) {
       try {
         mode = localStorage.getItem(MODE_CACHE_KEY);
@@ -310,14 +336,14 @@
   const redesigned = () => getMode() === 'redesign';
 
   function setMode(mode) {
-    // bridge.js stores it (and updates the popup); setting it here too makes the switch instant.
-    document.documentElement.dataset.ntsSeekMode = mode;
+    // settings-bridge.js stores it (and updates the popup); setting it here too makes the switch instant.
+    document.documentElement.dataset.bntsMode = mode;
     try {
       localStorage.setItem(MODE_CACHE_KEY, mode);
     } catch (e) {
-      /* fine: bridge.js keeps the real setting */
+      /* fine: settings-bridge.js keeps the real setting */
     }
-    document.dispatchEvent(new CustomEvent('nts-seek:set-mode', { detail: mode }));
+    document.dispatchEvent(new CustomEvent('bnts:set-mode', { detail: mode }));
   }
 
   function showModeMenu(anchor) {
@@ -358,10 +384,10 @@
   function removeEverything() {
     teardownView();
     removeRedesign();
-    document.querySelectorAll('.nts-seek-control, .nts-seek-markers, .nts-seek-snackbar').forEach((n) => n.remove());
-    document.querySelectorAll('.nts-seek-skip').forEach((n) => n.classList.remove('nts-seek-skip'));
-    document.querySelectorAll('.nts-seek-bar').forEach((n) => n.classList.remove('nts-seek-bar'));
-    document.documentElement.style.removeProperty('--nts-seek-drawer-height');
+    document.querySelectorAll('.bnts-control, .bnts-markers, .bnts-snackbar').forEach((n) => n.remove());
+    document.querySelectorAll('.bnts-skip').forEach((n) => n.classList.remove('bnts-skip'));
+    document.querySelectorAll('.bnts-bar').forEach((n) => n.classList.remove('bnts-bar'));
+    document.documentElement.style.removeProperty('--bnts-drawer-height');
     releaseMediaSession();
     const ms = navigator.mediaSession;
     if (ms && media.base && ms.metadata && media.ours.has(ms.metadata) && typeof MediaMetadata === 'function') {
@@ -524,15 +550,15 @@
   // hover in NTS's own (narrower) bar.
   function volumeControl(className) {
     const button = h('button', {
-      type: 'button', class: 'nts-seek-volume__button nts-link', title: 'Mute (M)', 'aria-label': 'Mute',
+      type: 'button', class: 'bnts-volume__button nts-link', title: 'Mute (M)', 'aria-label': 'Mute',
       onclick: () => toggleMute(),
     });
     const slider = h('input', {
-      type: 'range', class: 'nts-seek-volume__slider', min: '0', max: '100', step: '1',
+      type: 'range', class: 'bnts-volume__slider', min: '0', max: '100', step: '1',
       'aria-label': 'Volume', title: 'Volume (- and +)',
     });
     slider.addEventListener('input', () => setVolume(Number(slider.value) / 100));
-    const control = h('div', { class: `nts-seek-volume ${className}` }, button, h('div', { class: 'nts-seek-volume__track' }, slider));
+    const control = h('div', { class: `bnts-volume ${className}` }, button, h('div', { class: 'bnts-volume__track' }, slider));
     control.addEventListener('wheel', (e) => {
       e.preventDefault();
       setVolume((sound.muted ? 0 : sound.volume) + (e.deltaY < 0 ? VOLUME_STEP : -VOLUME_STEP));
@@ -544,9 +570,9 @@
     const level = sound.muted ? 0 : sound.volume;
     const def = level === 0 ? ICON.volumeOff : level < 0.5 ? ICON.volumeLow : ICON.volumeHigh;
     const percent = Math.round(level * 100);
-    for (const control of document.querySelectorAll('.nts-seek-volume')) {
-      const button = control.querySelector('.nts-seek-volume__button');
-      const slider = control.querySelector('.nts-seek-volume__slider');
+    for (const control of document.querySelectorAll('.bnts-volume')) {
+      const button = control.querySelector('.bnts-volume__button');
+      const slider = control.querySelector('.bnts-volume__slider');
       if (button.dataset.icon !== def.name) {
         button.dataset.icon = def.name;
         button.replaceChildren(icon(def));
@@ -557,7 +583,7 @@
       button.setAttribute('aria-pressed', String(silent));
       if (slider.value !== String(percent)) slider.value = String(percent);
       slider.setAttribute('aria-valuetext', `${percent}%`);
-      slider.style.setProperty('--nts-seek-volume', `${percent}%`);
+      slider.style.setProperty('--bnts-volume', `${percent}%`);
     }
   }
 
@@ -744,7 +770,7 @@
       Object.getPrototypeOf(inst)._onClick.call(saveProxy(inst, track, ep));
       return true;
     } catch (e) {
-      console.warn('[NTS Tracklist Seek] Could not save track', e);
+      console.warn('[Better NTS] Could not save track', e);
       return false;
     }
   }
@@ -756,7 +782,7 @@
 
   function snackbar(message) {
     if (!snackbarEl || !snackbarEl.isConnected) {
-      snackbarEl = h('div', { class: 'snackbar snackbar--fade nts-seek-snackbar', role: 'status', 'aria-live': 'polite' },
+      snackbarEl = h('div', { class: 'snackbar snackbar--fade bnts-snackbar', role: 'status', 'aria-live': 'polite' },
         h('span', { class: 'snackbar__text' }));
       const host = document.getElementById('react-content') || document.getElementById('react-content-mobile') || document.body;
       host.append(snackbarEl);
@@ -801,7 +827,7 @@
     popover = null;
     el.remove();
     anchor.setAttribute('aria-expanded', 'false');
-    anchor.classList.remove('nts-seek-anchor--open');
+    anchor.classList.remove('bnts-anchor--open');
     if (restoreFocus && anchor.isConnected) anchor.focus({ preventScroll: true });
   }
 
@@ -828,10 +854,10 @@
     const sameAnchor = popover && popover.anchor === anchor;
     closePopover();
     if (sameAnchor && !point) return null;
-    const el = h('div', { class: `nts-seek-popover nts-seek-popover--${role}`, role, 'aria-label': label }, content);
+    const el = h('div', { class: `bnts-popover bnts-popover--${role}`, role, 'aria-label': label }, content);
     document.body.append(el);
     anchor.setAttribute('aria-expanded', 'true');
-    anchor.classList.add('nts-seek-anchor--open');
+    anchor.classList.add('bnts-anchor--open');
     popover = { el, anchor };
     positionPopover(el, anchor, point);
     return el;
@@ -840,25 +866,25 @@
   // items: { label, onSelect } | { label, href } | { label, checked, onSelect } | { heading } | { separator: true }
   function showMenu(anchor, label, items, point) {
     const nodes = items.map((item) => {
-      if (item.separator) return h('div', { class: 'nts-seek-popover__separator', role: 'separator' });
-      if (item.heading) return h('div', { class: 'nts-seek-popover__heading', text: item.heading });
+      if (item.separator) return h('div', { class: 'bnts-popover__separator', role: 'separator' });
+      if (item.heading) return h('div', { class: 'bnts-popover__heading', text: item.heading });
       if (item.href) {
         return h('a', {
-          class: 'nts-seek-popover__item', role: 'menuitem', tabindex: '-1',
+          class: 'bnts-popover__item', role: 'menuitem', tabindex: '-1',
           href: item.href, target: '_blank', rel: 'noopener noreferrer',
           onclick: () => closePopover(),
-        }, h('span', { text: item.label }), icon(ICON.external, 'nts-seek-popover__external'));
+        }, h('span', { text: item.label }), icon(ICON.external, 'bnts-popover__external'));
       }
       const isRadio = typeof item.checked === 'boolean';
       return h('button', {
-        type: 'button', class: 'nts-seek-popover__item', tabindex: '-1',
+        type: 'button', class: 'bnts-popover__item', tabindex: '-1',
         role: isRadio ? 'menuitemradio' : 'menuitem',
         'aria-checked': isRadio ? String(item.checked) : null,
         onclick: () => {
           closePopover({ restoreFocus: true });
           item.onSelect();
         },
-      }, isRadio ? icon(ICON.check, 'nts-seek-popover__check') : null, h('span', { text: item.label }));
+      }, isRadio ? icon(ICON.check, 'bnts-popover__check') : null, h('span', { text: item.label }));
     });
 
     const el = openPopover(anchor, 'menu', label, nodes, point);
@@ -901,8 +927,8 @@
       h('dd', { text }),
     ]);
     const el = openPopover(anchor, 'dialog', 'Keyboard shortcuts', [
-      h('div', { class: 'nts-seek-popover__title', text: 'Keyboard shortcuts' }),
-      h('dl', { class: 'nts-seek-keys' }, rows),
+      h('div', { class: 'bnts-popover__title', text: 'Keyboard shortcuts' }),
+      h('dl', { class: 'bnts-keys' }, rows),
     ]);
     if (!el) return;
     el.tabIndex = -1;
@@ -917,13 +943,13 @@
   }
 
   function toggleShortcuts() {
-    if (popover && popover.el.classList.contains('nts-seek-popover--dialog')) {
+    if (popover && popover.el.classList.contains('bnts-popover--dialog')) {
       closePopover({ restoreFocus: true });
       return true;
     }
     const candidates = [
       view && view.dom && view.dom.shortcutsButton,
-      ...document.querySelectorAll('.nts-seek-volume__button'),
+      ...document.querySelectorAll('.bnts-volume__button'),
     ];
     const anchor = candidates.find(isShown);
     if (!anchor) return false;
@@ -1048,31 +1074,31 @@
   function buildList() {
     const v = view;
     const input = h('input', {
-      type: 'text', class: 'nts-seek-filter__input', placeholder: 'Filter tracks',
+      type: 'text', class: 'bnts-filter__input', placeholder: 'Filter tracks',
       'aria-label': 'Filter tracks', autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search',
     });
-    const clear = h('button', { type: 'button', class: 'nts-seek-filter__clear nts-link', title: 'Clear filter', 'aria-label': 'Clear filter', hidden: true },
+    const clear = h('button', { type: 'button', class: 'bnts-filter__clear nts-link', title: 'Clear filter', 'aria-label': 'Clear filter', hidden: true },
       icon(ICON.clear));
-    const count = h('span', { class: 'nts-seek-toolbar__count', 'aria-live': 'polite' });
+    const count = h('span', { class: 'bnts-toolbar__count', 'aria-live': 'polite' });
     const iconButton = (def, title, onclick) =>
-      h('button', { type: 'button', class: 'nts-seek-toolbar__button nts-link', title, 'aria-label': title, onclick }, icon(def));
+      h('button', { type: 'button', class: 'bnts-toolbar__button nts-link', title, 'aria-label': title, onclick }, icon(def));
     const shortcutsButton = iconButton(ICON.keyboard, 'Keyboard shortcuts (?)', (e) => showShortcuts(e.currentTarget));
     shortcutsButton.setAttribute('aria-haspopup', 'dialog');
     shortcutsButton.setAttribute('aria-expanded', 'false');
 
-    const toolbar = h('div', { class: 'nts-seek-toolbar' },
-      h('div', { class: 'nts-seek-filter', role: 'search' }, icon(ICON.search, 'nts-seek-filter__icon'), input, clear),
+    const toolbar = h('div', { class: 'bnts-toolbar' },
+      h('div', { class: 'bnts-filter', role: 'search' }, icon(ICON.search, 'bnts-filter__icon'), input, clear),
       count,
       iconButton(ICON.share, 'Copy link to the current moment', () => {
         copyText(episodeUrl(v.ep.path, currentTime()), 'Link copied');
       }),
       iconButton(ICON.copy, 'Copy tracklist', () => copyText(tracklistText(), 'Tracklist copied')),
       shortcutsButton,
-      modeButton('nts-seek-toolbar__button nts-link'));
+      modeButton('bnts-toolbar__button nts-link'));
 
-    const scroller = h('div', { class: 'nts-seek-full__scroller', role: 'list', 'aria-label': 'Tracklist' });
+    const scroller = h('div', { class: 'bnts-full__scroller', role: 'list', 'aria-label': 'Tracklist' });
     const rows = v.tracks.map((track, index) => buildRow(track, index));
-    const empty = h('div', { class: 'nts-seek-full__empty', text: 'No matching tracks', hidden: true });
+    const empty = h('div', { class: 'bnts-full__empty', text: 'No matching tracks', hidden: true });
     scroller.append(...rows.map((r) => r.row), empty);
     const playing = rows[v.currentIndex];
     if (playing) {
@@ -1080,7 +1106,7 @@
       playing.row.setAttribute('aria-current', 'true');
     }
 
-    const root = h('div', { class: 'nts-seek-full' }, toolbar, scroller);
+    const root = h('div', { class: 'bnts-full' }, toolbar, scroller);
     v.dom = { root, scroller, rows, rowByEl: new Map(rows.map((r) => [r.row, r])), input, clear, count, empty,
       shortcutsButton, active: -1, query: '', lastUserScroll: 0 };
 
@@ -1130,19 +1156,19 @@
 
   function buildRow(track, index) {
     const time = h('div', { class: 'episode-player-tracklist__time' });
-    const detail = h('div', { class: 'episode-player-tracklist__detail nts-seek-row__detail', tabindex: '-1' },
+    const detail = h('div', { class: 'episode-player-tracklist__detail bnts-row__detail', tabindex: '-1' },
       time,
       h('div', null, visualiser()),
-      h('div', { class: 'nts-seek-row__text' },
+      h('div', { class: 'bnts-row__text' },
         h('div', { class: 'episode-player-tracklist__artist', text: track.artist }),
         h('div', { class: 'episode-player-tracklist__title', text: track.title })));
     const more = h('button', {
-      type: 'button', class: 'nts-seek-row__more nts-link', tabindex: '-1', title: 'More options',
+      type: 'button', class: 'bnts-row__more nts-link', tabindex: '-1', title: 'More options',
       'aria-label': `More options: ${trackLabel(track)}`, 'aria-haspopup': 'menu', 'aria-expanded': 'false',
     }, icon(ICON.more));
-    const save = h('button', { type: 'button', class: 'save-track-button nts-seek-save', tabindex: '-1' });
-    const row = h('div', { class: 'episode-player-tracklist__track nts-seek-row', role: 'listitem' },
-      detail, h('div', { class: 'nts-seek-row__actions' }, more, save));
+    const save = h('button', { type: 'button', class: 'save-track-button bnts-save', tabindex: '-1' });
+    const row = h('div', { class: 'episode-player-tracklist__track bnts-row', role: 'listitem' },
+      detail, h('div', { class: 'bnts-row__actions' }, more, save));
 
     const r = { track, index, row, detail, time, more, save, saveKey: '', haystack: '' };
     updateRowTime(r);
@@ -1156,7 +1182,7 @@
     r.time.classList.toggle('episode-player-tracklist__time--empty', !timed);
     if (t.estimated) r.time.title = 'Estimated timestamp';
     else r.time.removeAttribute('title');
-    r.row.classList.toggle('nts-seek-row--no-time', !timed);
+    r.row.classList.toggle('bnts-row--no-time', !timed);
     if (timed) {
       r.detail.setAttribute('role', 'button');
       r.detail.setAttribute('aria-label', `Play from ${formatTimestamp(t.offset)}: ${trackLabel(t)}`);
@@ -1170,7 +1196,7 @@
   // The same little visualiser NTS shows next to the playing track, animated with CSS.
   function visualiser() {
     const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('class', 'visualiser episode-player-tracklist__visualiser nts-seek-visualiser');
+    svg.setAttribute('class', 'visualiser episode-player-tracklist__visualiser bnts-visualiser');
     svg.setAttribute('viewBox', '-15 -15 130 130');
     svg.setAttribute('aria-hidden', 'true');
     const g = document.createElementNS(SVG_NS, 'g');
@@ -1215,7 +1241,7 @@
 
   function rowFromNode(node) {
     if (!listMounted() || !(node instanceof Element)) return null;
-    const rowEl = node.closest('.nts-seek-row');
+    const rowEl = node.closest('.bnts-row');
     return rowEl ? view.dom.rowByEl.get(rowEl) || null : null;
   }
 
@@ -1241,10 +1267,10 @@
   }
 
   function flash(row) {
-    row.classList.remove('nts-seek-flash');
+    row.classList.remove('bnts-flash');
     void row.offsetWidth; // restart the animation if the row is clicked twice
-    row.classList.add('nts-seek-flash');
-    setTimeout(() => row.classList.remove('nts-seek-flash'), 700);
+    row.classList.add('bnts-flash');
+    setTimeout(() => row.classList.remove('bnts-flash'), 700);
   }
 
   function playRow(r) {
@@ -1257,12 +1283,12 @@
     if (e.button !== 0) return;
     const r = rowFromNode(e.target);
     if (!r) return;
-    if (e.target.closest('.nts-seek-row__more')) {
+    if (e.target.closest('.bnts-row__more')) {
       setActiveRow(r.index, false);
       openRowMenu(r);
       return;
     }
-    if (e.target.closest('.nts-seek-save')) {
+    if (e.target.closest('.bnts-save')) {
       setActiveRow(r.index, false);
       onSaveClick(r);
       return;
@@ -1437,7 +1463,7 @@
   function updatePausedState() {
     if (!listMounted()) return;
     const audio = findAudio();
-    view.dom.root.classList.toggle('nts-seek-full--paused', !audio || audio.paused);
+    view.dom.root.classList.toggle('bnts-full--paused', !audio || audio.paused);
   }
 
   function scrollToCurrent(behavior) {
@@ -1491,19 +1517,19 @@
   function skipButton(def, label, onclick, extraClass) {
     return h('button', {
       type: 'button',
-      class: `episode-player__skip-button mobile-link mobile-link--button nts-link nts-seek-control ${extraClass}`,
+      class: `episode-player__skip-button mobile-link mobile-link--button nts-link bnts-control ${extraClass}`,
       title: label, 'aria-label': label, onclick,
-    }, icon(def, 'episode-player__skip-icon nts-seek-skip-icon'));
+    }, icon(def, 'episode-player__skip-icon bnts-skip-icon'));
   }
 
   function ensureSkipControls() {
     for (const group of document.querySelectorAll(SEL.skipGroup)) {
-      if (group.querySelector(':scope > .nts-seek-control')) continue;
-      const prev = skipButton(ICON.prev, 'Previous track (Shift+←)', () => prevTrack(), 'nts-seek-prev');
-      const next = skipButton(ICON.next, 'Next track (Shift+→)', () => nextTrack(), 'nts-seek-next');
-      group.classList.add('nts-seek-skip');
+      if (group.querySelector(':scope > .bnts-control')) continue;
+      const prev = skipButton(ICON.prev, 'Previous track (Shift+←)', () => prevTrack(), 'bnts-prev');
+      const next = skipButton(ICON.next, 'Next track (Shift+→)', () => nextTrack(), 'bnts-next');
+      group.classList.add('bnts-skip');
       group.insertBefore(prev, group.firstChild);
-      group.append(next, volumeControl('nts-seek-control nts-seek-volume--compact'));
+      group.append(next, volumeControl('bnts-control bnts-volume--compact'));
     }
     updateSkipControls();
     updateVolumeControls();
@@ -1514,11 +1540,11 @@
     const now = currentTime();
     const canPrev = on && previousTarget(now) !== null;
     const canNext = on && nextTarget(now) !== null;
-    for (const b of document.querySelectorAll('.nts-seek-prev')) {
+    for (const b of document.querySelectorAll('.bnts-prev')) {
       b.hidden = !on;
       b.disabled = !canPrev;
     }
-    for (const b of document.querySelectorAll('.nts-seek-next')) {
+    for (const b of document.querySelectorAll('.bnts-next')) {
       b.hidden = !on;
       b.disabled = !canNext;
     }
@@ -1532,14 +1558,14 @@
     const bar = document.querySelector(SEL.progressBar);
     const wrap = bar && bar.parentElement;
     if (!wrap) return;
-    if (!wrap.classList.contains('nts-seek-bar')) {
-      wrap.classList.add('nts-seek-bar');
+    if (!wrap.classList.contains('bnts-bar')) {
+      wrap.classList.add('bnts-bar');
       wrap.addEventListener('pointermove', onBarHover);
       wrap.addEventListener('pointerleave', hideBarTip);
     }
-    let layer = wrap.querySelector(':scope > .nts-seek-markers');
+    let layer = wrap.querySelector(':scope > .bnts-markers');
     if (!layer) {
-      layer = h('div', { class: 'nts-seek-markers', 'aria-hidden': 'true' });
+      layer = h('div', { class: 'bnts-markers', 'aria-hidden': 'true' });
       wrap.append(layer);
     }
     const duration = episodeDuration();
@@ -1552,7 +1578,7 @@
       for (const i of view.timed) {
         const offset = view.tracks[i].offset;
         if (offset <= 0 || offset >= duration) continue;
-        ticks.push(h('span', { class: 'nts-seek-markers__tick', style: `left:${((offset / duration) * 100).toFixed(3)}%` }));
+        ticks.push(h('span', { class: 'bnts-markers__tick', style: `left:${((offset / duration) * 100).toFixed(3)}%` }));
       }
     }
     layer.replaceChildren(...ticks);
@@ -1572,11 +1598,11 @@
     const index = featuresOn() ? trackIndexAt(seconds) : -1;
     const track = index >= 0 ? view.tracks[index] : null;
 
-    if (!barTip) barTip = h('div', { class: 'nts-seek-bar-tip', role: 'tooltip' });
+    if (!barTip) barTip = h('div', { class: 'bnts-bar-tip', role: 'tooltip' });
     barTip.replaceChildren(
-      h('div', { class: 'nts-seek-bar-tip__time', text: formatTimestamp(seconds) }),
-      track && track.artist ? h('div', { class: 'nts-seek-bar-tip__artist', text: track.artist }) : null,
-      track && track.title ? h('div', { class: 'nts-seek-bar-tip__title', text: track.title }) : null
+      h('div', { class: 'bnts-bar-tip__time', text: formatTimestamp(seconds) }),
+      track && track.artist ? h('div', { class: 'bnts-bar-tip__artist', text: track.artist }) : null,
+      track && track.title ? h('div', { class: 'bnts-bar-tip__title', text: track.title }) : null
     );
     if (!barTip.isConnected) document.body.append(barTip);
     const x = rect.left + inset + fraction * (rect.width - inset * 2);
@@ -1584,7 +1610,7 @@
     const left = clamp(x, half + 8, document.documentElement.clientWidth - half - 8);
     barTip.style.left = `${Math.round(left)}px`;
     barTip.style.top = `${Math.round(rect.top - 10)}px`;
-    barTip.style.setProperty('--nts-seek-arrow', `${Math.round(x - left)}px`);
+    barTip.style.setProperty('--bnts-arrow', `${Math.round(x - left)}px`);
   }
 
   function hideBarTip() {
@@ -1593,13 +1619,13 @@
 
   // ------------------------------------------------------------------ redesign: full-width bar + side drawer
 
-  // Redesign mode is mostly CSS on NTS's own markup (content.css, html[data-nts-seek-mode="redesign"]).
+  // Redesign mode is mostly CSS on NTS's own markup (content.css, html[data-bnts-mode="redesign"]).
   // Here we add the few pieces NTS doesn't have: the "now playing" line and the volume / style controls
   // in the bar, and artwork plus Tracklist / Up next tabs in the drawer.
 
   function modeButton(className) {
     return h('button', {
-      type: 'button', class: `${className} nts-seek-mode`, title: 'Player style', 'aria-label': 'Player style',
+      type: 'button', class: `${className} bnts-mode`, title: 'Player style', 'aria-label': 'Player style',
       'aria-haspopup': 'menu', 'aria-expanded': 'false',
       onclick: (e) => showModeMenu(e.currentTarget),
     }, icon(ICON.layout));
@@ -1619,8 +1645,8 @@
     } catch (e) {
       /* not remembered, still switches */
     }
-    document.documentElement.dataset.ntsSeekTab = tab;
-    for (const b of document.querySelectorAll('.nts-seek-tabs__tab')) {
+    document.documentElement.dataset.bntsTab = tab;
+    for (const b of document.querySelectorAll('.bnts-tabs__tab')) {
       const selected = b.dataset.tab === tab;
       b.setAttribute('aria-selected', String(selected));
       b.tabIndex = selected ? 0 : -1;
@@ -1655,43 +1681,43 @@
   function ensureRedesign() {
     if (!redesigned()) return;
     const root = document.documentElement;
-    if (!root.dataset.ntsSeekTab) root.dataset.ntsSeekTab = storedDrawerTab();
+    if (!root.dataset.bntsTab) root.dataset.bntsTab = storedDrawerTab();
 
     const player = document.querySelector(`${SEL.footerPlayer} ${SEL.player}`);
-    if (player && !player.querySelector(':scope > .nts-seek-now')) {
+    if (player && !player.querySelector(':scope > .bnts-now')) {
       // [ARTIST  Title] • [EPISODE NAME]
-      const now = h('div', { class: 'nts-seek-now' },
-        h('button', { type: 'button', class: 'nts-seek-now__track', onclick: showCurrentInDrawer },
-          h('span', { class: 'nts-seek-now__artist' }),
-          h('span', { class: 'nts-seek-now__title' })),
-        h('span', { class: 'nts-seek-now__sep', 'aria-hidden': 'true', text: '•' }),
-        h('button', { type: 'button', class: 'nts-seek-now__episode', title: 'Go to episode', onclick: goToEpisode }));
-      const extras = h('div', { class: 'nts-seek-extras' },
-        volumeControl('nts-seek-volume--wide'),
-        modeButton('nts-seek-extras__button nts-link'));
+      const now = h('div', { class: 'bnts-now' },
+        h('button', { type: 'button', class: 'bnts-now__track', onclick: showCurrentInDrawer },
+          h('span', { class: 'bnts-now__artist' }),
+          h('span', { class: 'bnts-now__title' })),
+        h('span', { class: 'bnts-now__sep', 'aria-hidden': 'true', text: '•' }),
+        h('button', { type: 'button', class: 'bnts-now__episode', title: 'Go to episode', onclick: goToEpisode }));
+      const extras = h('div', { class: 'bnts-extras' },
+        volumeControl('bnts-volume--wide'),
+        modeButton('bnts-extras__button nts-link'));
       player.append(now, extras);
     }
 
     const drawer = document.querySelector(`${SEL.footerPlayer} .expanded-episode-player`);
     if (drawer) {
       const header = drawer.querySelector(':scope > .expanded-episode-player__header');
-      if (header && !header.querySelector(':scope > .nts-seek-art')) {
-        header.insertBefore(h('img', { class: 'nts-seek-art', alt: '', decoding: 'async' }), header.firstChild);
+      if (header && !header.querySelector(':scope > .bnts-art')) {
+        header.insertBefore(h('img', { class: 'bnts-art', alt: '', decoding: 'async' }), header.firstChild);
       }
-      if (!drawer.querySelector(':scope > .nts-seek-tabs')) {
-        const current = root.dataset.ntsSeekTab;
+      if (!drawer.querySelector(':scope > .bnts-tabs')) {
+        const current = root.dataset.bntsTab;
         const tab = (id, label) => h('button', {
-          type: 'button', role: 'tab', class: 'nts-seek-tabs__tab', 'data-tab': id,
+          type: 'button', role: 'tab', class: 'bnts-tabs__tab', 'data-tab': id,
           'aria-selected': String(current === id), tabindex: current === id ? '0' : '-1',
           onclick: () => setDrawerTab(id),
         }, label);
-        const tabs = h('div', { class: 'nts-seek-tabs', role: 'tablist', 'aria-label': 'Player panel' },
+        const tabs = h('div', { class: 'bnts-tabs', role: 'tablist', 'aria-label': 'Player panel' },
           tab('tracks', 'Tracklist'), tab('upnext', 'Up next'));
         tabs.addEventListener('keydown', (e) => {
           if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
           e.preventDefault();
           e.stopPropagation();
-          const next = root.dataset.ntsSeekTab === 'tracks' ? 'upnext' : 'tracks';
+          const next = root.dataset.bntsTab === 'tracks' ? 'upnext' : 'tracks';
           setDrawerTab(next);
           tabs.querySelector(`[data-tab="${next}"]`).focus();
         });
@@ -1705,13 +1731,13 @@
   }
 
   function removeRedesign() {
-    document.querySelectorAll('.nts-seek-now, .nts-seek-extras, .nts-seek-tabs, .nts-seek-art').forEach((n) => n.remove());
-    delete document.documentElement.dataset.ntsSeekTab;
+    document.querySelectorAll('.bnts-now, .bnts-extras, .bnts-tabs, .bnts-art').forEach((n) => n.remove());
+    delete document.documentElement.dataset.bntsTab;
   }
 
   // Bigger version of NTS's 100×100 thumbnail for the drawer.
   function updateArt() {
-    const art = document.querySelector('.nts-seek-art');
+    const art = document.querySelector('.bnts-art');
     const thumb = document.querySelector(`${SEL.footerPlayer} .soundcloud-player__thumbnail img`);
     if (!art || !thumb || !thumb.src) return;
     const src = thumb.src.replace(/\/resize\/\d+x\d+\//, '/resize/400x400/');
@@ -1720,11 +1746,11 @@
 
   // "ARTIST Title · Episode" above the progress bar.
   function updateNow() {
-    const now = document.querySelector('.nts-seek-now');
+    const now = document.querySelector('.bnts-now');
     if (!now) return;
-    const trackButton = now.querySelector('.nts-seek-now__track');
-    const separator = now.querySelector('.nts-seek-now__sep');
-    const episodeButton = now.querySelector('.nts-seek-now__episode');
+    const trackButton = now.querySelector('.bnts-now__track');
+    const separator = now.querySelector('.bnts-now__sep');
+    const episodeButton = now.querySelector('.bnts-now__episode');
     const track = featuresOn() && view.currentIndex >= 0 ? view.tracks[view.currentIndex] : null;
     trackButton.hidden = !track;
     if (track) {
@@ -1738,7 +1764,7 @@
     episodeButton.hidden = !name;
     episodeButton.title = name ? `Go to episode: ${name}` : 'Go to episode';
     separator.hidden = !track || !name;
-    now.classList.toggle('nts-seek-now--track', !!track);
+    now.classList.toggle('bnts-now--track', !!track);
   }
 
   // The drawer runs from below NTS's fixed header down to the top of the player bar.
@@ -1754,7 +1780,7 @@
     const barTop = bar && bar.getBoundingClientRect().height ? bar.getBoundingClientRect().top : window.innerHeight - 58;
     const value = `${Math.max(200, Math.round(barTop - top))}px`;
     const style = document.documentElement.style;
-    if (style.getPropertyValue('--nts-seek-drawer-height') !== value) style.setProperty('--nts-seek-drawer-height', value);
+    if (style.getPropertyValue('--bnts-drawer-height') !== value) style.setProperty('--bnts-drawer-height', value);
   }
 
   // ------------------------------------------------------------------ media keys / lock screen
@@ -2040,13 +2066,7 @@
     document.addEventListener(type, onMediaEvent, true);
   }
 
-  try {
-    localStorage.removeItem('nts-tracklist-seek:playback-rate'); // left over from the removed speed control
-  } catch (e) {
-    /* nothing to clean up */
-  }
-
   new MutationObserver(scheduleSync).observe(document.documentElement, { childList: true, subtree: true });
-  new MutationObserver(onModeChange).observe(document.documentElement, { attributes: true, attributeFilter: ['data-nts-seek-mode'] });
+  new MutationObserver(onModeChange).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bnts-mode'] });
   onModeChange();
 })();
