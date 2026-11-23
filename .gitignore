@@ -1,0 +1,22 @@
+# Saved copy of an NTS page, used for reference while developing
+reference.html
+
+# Packaged builds
+*.zip
+*.xpi
+*.crx
+*.pem
+web-ext-artifacts/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Claude Code
+.claude/
