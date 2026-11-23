@@ -1,0 +1,468 @@
+/* NTS Tracklist Seek: "Redesign" player style.
+   Full-width player bar (artwork, controls, a "now playing" line over a wide progress bar, volume,
+   player style) and a full-height drawer on the right with artwork, Tracklist / Up next tabs and a
+   tall tracklist. Everything is scoped to html[data-nts-seek-mode="redesign"].
+   Desktop only (1025px+): on smaller screens NTS's own player already uses the full width. */
+
+.nts-seek-now,
+.nts-seek-extras,
+.nts-seek-tabs,
+.nts-seek-art {
+  display: none;
+}
+
+@media (min-width: 1025px) {
+  /* ---------------------------------------------------------- the bar */
+
+  html[data-nts-seek-mode="redesign"] .footer-player.footer-player--episode-player {
+    left: 0;
+    right: 0;
+    width: auto;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player-wrapper {
+    background-color: #fff;
+    border-top: 1px solid #ccc;
+    box-shadow: 0 -1px 12px 0 rgba(0, 0, 0, 0.06);
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    border-top: 0;
+    box-shadow: none;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player__player {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* One grid for the whole bar: every control on the right is a full-height cell (58px tall),
+     separated by the same 1px #ccc divider, with its icon centred. */
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player-wrapper {
+    align-items: stretch;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player {
+    height: 58px;
+    align-items: stretch;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player > .episode-player__button-group {
+    display: flex;
+    align-items: stretch;
+    height: 58px;
+    padding: 0;
+    background-color: #fff;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player__button-group > .follow-button {
+    align-self: center;
+    margin: 0 16px;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player__button-group > .episode-player__up-next-expand-button,
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player-wrapper > .episode-player__close {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 58px;
+    height: 58px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-left: 1px solid #ccc;
+    border-radius: 0;
+    background-color: #fff;
+    box-shadow: none;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player__up-next-expand-button:hover,
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player-wrapper > .episode-player__close:hover {
+    background-color: #f1f1f1;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player__expand-icon,
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player__close > .nts-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player {
+    height: 58px;
+    border-right: 0;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player {
+    display: grid;
+    grid-template-columns: auto auto auto minmax(0, 1fr) auto auto;
+    grid-template-rows: 28px 30px;
+    grid-template-areas:
+      "thumb play skip now extras logo"
+      "thumb play skip bar extras logo";
+    align-items: center;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player__content {
+    display: contents;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player__thumbnail {
+    grid-area: thumb;
+    display: block;
+    width: 58px;
+    height: 58px;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player__play-button {
+    grid-area: play;
+    width: 58px;
+    height: 58px;
+  }
+
+  /* ⏮ ↺30 ↻30 ⏭: same size, even gaps, centred in the bar. */
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player .episode-player__skip {
+    grid-area: skip;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 16px 0 4px;
+    background-color: transparent;
+  }
+
+  html[data-nts-seek-mode="redesign"] .episode-player__skip.nts-seek-skip.nts-seek-skip > .episode-player__skip-button,
+  html[data-nts-seek-mode="redesign"] .episode-player__skip.nts-seek-skip.nts-seek-skip > .episode-player__skip-button:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    margin: 0;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .episode-player__skip-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* The episode name lives in the "now playing" line instead. */
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player__episode-title-container {
+    display: none !important;
+  }
+
+  /* NTS hides the progress bar while paused; here it always stays. */
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player__progress-bar-container,
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player__progress-bar-container.visuallyhidden {
+    grid-area: bar;
+    align-self: start;
+    position: static;
+    clip: auto;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player__progress-bar {
+    margin: 5px 0;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player__brand-logo-container {
+    grid-area: logo;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 58px;
+    padding: 0;
+    border-left: 1px solid #ccc;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .soundcloud-player__brand-logo {
+    display: block;
+    width: 22px;
+  }
+
+  /* Speed and player style sit in the bar's own group here. */
+  html[data-nts-seek-mode="redesign"] .episode-player__skip .nts-seek-volume,
+  html[data-nts-seek-mode="redesign"] .nts-seek-toolbar .nts-seek-mode {
+    display: none !important;
+  }
+
+  /* [ARTIST  Title]  •  [EPISODE NAME]
+     Starts exactly where the elapsed time below it starts (NTS gives that label no left margin).
+     When space runs out the episode name shrinks first, then the title, then the artist. */
+  html[data-nts-seek-mode="redesign"] .nts-seek-now {
+    grid-area: now;
+    align-self: end;
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+    padding: 0 8px 1px 0;
+    white-space: nowrap;
+  }
+
+  html[data-nts-seek-mode="redesign"] .nts-seek-now [hidden] {
+    display: none !important;
+  }
+
+  .nts-seek-now__sep {
+    flex: none;
+    margin: 0 10px;
+    color: #999;
+    font-family: Arial, sans-serif;
+    font-size: 10px;
+    line-height: 16px;
+  }
+
+  .nts-seek-now__track,
+  .nts-seek-now__episode {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #000;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: opacity 0.1s linear;
+  }
+
+  .nts-seek-now__track:hover,
+  .nts-seek-now__episode:hover {
+    opacity: 0.7;
+  }
+
+  .nts-seek-now__track:focus-visible,
+  .nts-seek-now__episode:focus-visible,
+  .nts-seek-extras__button:focus-visible,
+  .nts-seek-tabs__tab:focus-visible {
+    outline: 2px solid #000;
+    outline-offset: 1px;
+    opacity: 1;
+  }
+
+  .nts-seek-now__track {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: baseline;
+    gap: 8px;
+    text-align: left;
+  }
+
+  .nts-seek-now__artist {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: Univers-Condensed, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 16px;
+    text-transform: uppercase;
+  }
+
+  .nts-seek-now__title {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+    line-height: 16px;
+    letter-spacing: 0.1px;
+  }
+
+  .nts-seek-now__title {
+    flex: 0 3 auto;
+  }
+
+  .nts-seek-now__episode {
+    flex: 0 100 auto;
+    max-width: 45%;
+    text-align: left;
+    font-family: Univers-Condensed, Arial, sans-serif;
+    font-size: 12px;
+    line-height: 16px;
+    text-transform: uppercase;
+    color: #666;
+  }
+
+  /* With no current track, the episode name is the main line. */
+  .nts-seek-now:not(.nts-seek-now--track) .nts-seek-now__episode {
+    max-width: 100%;
+    font-size: 14px;
+    font-weight: 700;
+    color: #000;
+  }
+
+  /* Speed + player style */
+  html[data-nts-seek-mode="redesign"] .nts-seek-extras {
+    grid-area: extras;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 12px 0 16px;
+  }
+
+  .nts-seek-extras__button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+
+  .nts-seek-extras__button > svg {
+    width: 20px;
+    height: 20px;
+    fill: #000;
+  }
+
+  /* ---------------------------------------------------------- the drawer
+     NTS's expanded player, moved to the right edge and made full height. */
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player .expanded-episode-player {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    left: auto;
+    right: 0;
+    bottom: 100%;
+    z-index: 1;
+    width: clamp(360px, 30vw, 460px);
+    height: var(--nts-seek-drawer-height, calc(100vh - 140px));
+    overflow: hidden;
+    border-left: 1px solid #ccc;
+    background-color: #fff;
+    box-shadow: -4px 0 12px 0 rgba(0, 0, 0, 0.12);
+    transform: translateX(calc(100% + 16px));
+    visibility: hidden;
+    transition: transform 0.2s ease-in-out, visibility 0s linear 0.2s;
+  }
+
+  html[data-nts-seek-mode="redesign"] .footer-player--episode-player.footer-player--expanded .expanded-episode-player {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.2s ease-in-out, visibility 0s linear;
+  }
+
+  html[data-nts-seek-mode="redesign"] .expanded-episode-player__header {
+    flex: none;
+    align-items: center;
+    padding-right: 44px; /* room for NTS's bookmark button */
+    border-bottom: 1px solid #ccc;
+  }
+
+  html[data-nts-seek-mode="redesign"] .nts-seek-art {
+    display: block;
+    flex: none;
+    width: 80px;
+    height: 80px;
+    margin: 16px 0 16px 16px;
+    object-fit: cover;
+    background-color: #f1f1f1;
+  }
+
+  html[data-nts-seek-mode="redesign"] .expanded-episode-player__link {
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+
+  html[data-nts-seek-mode="redesign"] .expanded-episode-player__title {
+    font-size: 18px;
+    line-height: 20px;
+    max-height: 40px;
+  }
+
+  html[data-nts-seek-mode="redesign"] .expanded-episode-player__metadata {
+    font-size: 12px;
+  }
+
+  html[data-nts-seek-mode="redesign"] .nts-seek-tabs {
+    display: flex;
+    flex: none;
+    gap: 24px;
+    padding: 0 16px;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .nts-seek-tabs__tab {
+    margin: 0 0 -1px;
+    padding: 12px 0 10px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: #999;
+    font-family: Univers-Condensed, Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 16px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 0.1s linear;
+  }
+
+  .nts-seek-tabs__tab:hover {
+    color: #4c4c4c;
+  }
+
+  .nts-seek-tabs__tab[aria-selected="true"] {
+    color: #000;
+    border-bottom-color: #000;
+  }
+
+  /* Tracklist tab: the list fills the drawer. */
+  html[data-nts-seek-mode="redesign"] .expanded-episode-player > .episode-player-tracklist {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    border-top: 0;
+    border-bottom: 0;
+  }
+
+  html[data-nts-seek-mode="redesign"] .expanded-episode-player .nts-seek-full {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  html[data-nts-seek-mode="redesign"] .expanded-episode-player .nts-seek-full__scroller {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  html[data-nts-seek-mode="redesign"] .expanded-episode-player .episode-player-tracklist__notification-preference {
+    flex: none;
+  }
+
+  /* Up next tab */
+  html[data-nts-seek-mode="redesign"] .expanded-episode-player > .up-next {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #999 transparent;
+  }
+
+  html[data-nts-seek-mode="redesign"][data-nts-seek-tab="tracks"] .expanded-episode-player > .up-next,
+  html[data-nts-seek-mode="redesign"][data-nts-seek-tab="upnext"] .expanded-episode-player > .episode-player-tracklist {
+    display: none;
+  }
+}

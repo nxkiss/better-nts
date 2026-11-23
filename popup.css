@@ -1,0 +1,121 @@
+/* Popup in NTS's look: black, white, uppercase condensed labels. */
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 320px;
+  margin: 0;
+  background: #000;
+  color: #fff;
+  font-family: Univers-Condensed, "Arial Narrow", Arial, sans-serif;
+}
+
+.head {
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid #4c4c4c;
+}
+
+.head__title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 20px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.head__sub {
+  margin: 4px 0 0;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 14px;
+  color: #999;
+}
+
+.modes {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+}
+
+.mode {
+  display: block;
+  position: relative;
+  cursor: pointer;
+}
+
+.mode input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mode__body {
+  display: block;
+  padding: 12px 14px;
+  border: 1px solid #4c4c4c;
+  transition: border-color 0.1s linear, background-color 0.1s linear;
+}
+
+.mode:hover .mode__body {
+  border-color: #999;
+}
+
+.mode input:focus-visible + .mode__body {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.mode input:checked + .mode__body {
+  background: #fff;
+  border-color: #fff;
+  color: #000;
+}
+
+.mode__name {
+  display: block;
+  font-size: 16px;
+  line-height: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.mode__desc {
+  display: block;
+  margin-top: 4px;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  color: #ccc;
+}
+
+.mode input:checked + .mode__body .mode__desc {
+  color: #4c4c4c;
+}
+
+.foot {
+  margin: 0;
+  padding: 0 16px 14px;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  color: #999;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 4px;
+  border: 1px solid #4c4c4c;
+  border-radius: 3px;
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+}

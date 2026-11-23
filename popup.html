@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>NTS Tracklist Seek</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="head">
+    <h1 class="head__title">Player style</h1>
+    <p class="head__sub">NTS Tracklist Seek</p>
+  </header>
+
+  <form class="modes" id="modes">
+    <label class="mode">
+      <input type="radio" name="mode" value="original">
+      <span class="mode__body">
+        <span class="mode__name">Original NTS</span>
+        <span class="mode__desc">NTS exactly as it is. The extension changes nothing.</span>
+      </span>
+    </label>
+    <label class="mode">
+      <input type="radio" name="mode" value="enhanced">
+      <span class="mode__body">
+        <span class="mode__name">Enhanced</span>
+        <span class="mode__desc">NTS's layout, plus the full clickable tracklist, save on every track, track skipping, volume, markers and shortcuts.</span>
+      </span>
+    </label>
+    <label class="mode">
+      <input type="radio" name="mode" value="redesign">
+      <span class="mode__body">
+        <span class="mode__name">Redesign</span>
+        <span class="mode__desc">Everything in Enhanced, in a full-width player bar with the current track, and a tall side drawer for the tracklist and Up Next.</span>
+      </span>
+    </label>
+  </form>
+
+  <p class="foot">Press <kbd>?</kbd> in the player for keyboard shortcuts.</p>
+
+  <script src="popup.js"></script>
+</body>
+</html>
