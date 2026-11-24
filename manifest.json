@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Better NTS",
-  "version": "2.2.0",
-  "description": "A better episode player for NTS: full clickable tracklist, save any track, track skipping, volume, media keys, shortcuts and an optional redesign.",
+  "version": "2.3.0",
+  "description": "A better episode player for NTS: full clickable tracklist, save any track, track skipping, volume, media keys, shortcuts, Ctrl+click to open in a new tab and an optional redesign.",
   "homepage_url": "https://github.com/nxkiss/better-nts",
   "icons": {
     "16": "icons/icon-16.png",
@@ -22,7 +22,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.nts.live/*", "https://nts.live/*"],
-      "js": ["src/content/settings-bridge.js"],
+      "js": ["src/content/settings-bridge.js", "src/content/new-tab.js"],
       "css": ["src/content/player.css", "src/content/redesign.css"],
       "run_at": "document_start"
     },

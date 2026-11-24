@@ -346,9 +346,18 @@
     document.dispatchEvent(new CustomEvent('bnts:set-mode', { detail: mode }));
   }
 
+  // Options other than the style live in extension storage too; settings-bridge.js mirrors each one
+  // onto <html> (data-bnts-new-tab="on|off") and saves changes asked for with "bnts:set-option".
+  const newTabClickOn = () => document.documentElement.dataset.bntsNewTab !== 'off';
+
+  function setOption(key, value) {
+    document.dispatchEvent(new CustomEvent('bnts:set-option', { detail: { key, value } }));
+  }
+
   function showModeMenu(anchor) {
     const current = getMode();
-    showMenu(anchor, 'Player style', [
+    const newTab = newTabClickOn();
+    showMenu(anchor, 'Player style and options', [
       { heading: 'Player style' },
       ...MODES.map((m) => ({
         label: m.label,
@@ -361,6 +370,17 @@
             : `Player style: ${m.label}`);
         },
       })),
+      { separator: true },
+      { heading: 'Options' },
+      {
+        label: 'Ctrl+click opens in new tab',
+        checked: newTab,
+        checkbox: true,
+        onSelect: () => {
+          setOption('newTabClick', !newTab);
+          snackbar(newTab ? 'Ctrl+click opens in new tab: off' : 'Ctrl+click opens in new tab: on');
+        },
+      },
     ]);
   }
 
@@ -863,7 +883,8 @@
     return el;
   }
 
-  // items: { label, onSelect } | { label, href } | { label, checked, onSelect } | { heading } | { separator: true }
+  // items: { label, onSelect } | { label, href } | { label, checked, onSelect } (radio)
+  //      | { label, checked, checkbox: true, onSelect } | { heading } | { separator: true }
   function showMenu(anchor, label, items, point) {
     const nodes = items.map((item) => {
       if (item.separator) return h('div', { class: 'bnts-popover__separator', role: 'separator' });
@@ -878,7 +899,7 @@
       const isRadio = typeof item.checked === 'boolean';
       return h('button', {
         type: 'button', class: 'bnts-popover__item', tabindex: '-1',
-        role: isRadio ? 'menuitemradio' : 'menuitem',
+        role: item.checkbox ? 'menuitemcheckbox' : isRadio ? 'menuitemradio' : 'menuitem',
         'aria-checked': isRadio ? String(item.checked) : null,
         onclick: () => {
           closePopover({ restoreFocus: true });
@@ -996,7 +1017,7 @@
   function timestampAccess() {
     const state = storeState();
     const status = state && state.userStatus;
-    if (status && status.isReady && 'canSeePremiumFeature' in status) return !!status.canSeePremiumFeature;
+    if (status && status.isReady && 'canSeePremiumFeature' in status) {return !!status.canSeePremiumFeature;}
     const list = document.querySelector(SEL.tracklist);
     if (!list) return null;
     return !list.querySelector(SEL.promo);

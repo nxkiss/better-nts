@@ -1,8 +1,9 @@
 // Better NTS: settings bridge
 //
 // Runs in the extension's isolated world at document_start. It can use extension storage, which
-// player.js (in the page's world) can't. It keeps <html data-bnts-mode="..."> in sync with the
-// "player style" setting, which the toolbar popup and the player's own menu both change.
+// player.js (in the page's world) can't. It mirrors the settings onto <html>:
+//   data-bnts-mode="..."       the player style, changed from the toolbar popup or the player's menu
+//   data-bnts-new-tab="on|off" options, changed from the Options section of the player's menu
 
 (() => {
   'use strict';
@@ -62,6 +63,33 @@
 
   api.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[STORAGE_KEY]) apply(changes[STORAGE_KEY].newValue);
+  });
+
+  // On/off options. player.js asks for a change with the "bnts:set-option" event.
+  const OPTIONS = {
+    newTabClick: { attribute: 'bntsNewTab', fallback: true },
+  };
+
+  function applyOption(key, value) {
+    const option = OPTIONS[key];
+    root.dataset[option.attribute] = (typeof value === 'boolean' ? value : option.fallback) ? 'on' : 'off';
+  }
+
+  for (const key of Object.keys(OPTIONS)) applyOption(key, undefined);
+  api.storage.local.get(Object.keys(OPTIONS)).then((stored) => {
+    for (const key of Object.keys(OPTIONS)) applyOption(key, stored && stored[key]);
+  });
+
+  api.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    for (const key of Object.keys(OPTIONS)) if (changes[key]) applyOption(key, changes[key].newValue);
+  });
+
+  document.addEventListener('bnts:set-option', (event) => {
+    const { key, value } = event.detail || {};
+    if (!(key in OPTIONS) || typeof value !== 'boolean') return;
+    applyOption(key, value);
+    api.storage.local.set({ [key]: value });
   });
 
   // The "Player style" menu inside the player asks for a change with this event.

@@ -2,6 +2,7 @@
 reference.html
 
 # Packaged builds
+dist/
 *.zip
 *.xpi
 *.crx
