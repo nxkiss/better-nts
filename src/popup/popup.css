@@ -98,6 +98,24 @@ body {
   color: #4c4c4c;
 }
 
+.options {
+  padding: 0 12px 12px;
+}
+
+/* On / off for the checkbox options, which otherwise look like the styles above. */
+.mode__state {
+  float: right;
+  font-weight: 400;
+}
+
+.mode__state::after {
+  content: "Off";
+}
+
+.mode input:checked + .mode__body .mode__state::after {
+  content: "On";
+}
+
 .foot {
   margin: 0;
   padding: 0 16px 14px;

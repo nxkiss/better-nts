@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Better NTS",
   "version": "2.3.0",
-  "description": "A better episode player for NTS: full clickable tracklist, save any track, track skipping, volume, media keys, shortcuts, Ctrl+click to open in a new tab and an optional redesign.",
+  "description": "A better episode player for NTS: full clickable tracklist, save any track, track skipping, volume, media keys, shortcuts, new episode notifications, Ctrl+click to open in a new tab and an optional redesign.",
   "homepage_url": "https://github.com/nxkiss/better-nts",
   "icons": {
     "16": "icons/icon-16.png",
@@ -10,7 +10,12 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage"],
+  "permissions": ["storage", "alarms", "notifications"],
+  "host_permissions": ["https://securetoken.googleapis.com/*", "https://firestore.googleapis.com/*"],
+  "background": {
+    "service_worker": "src/background/notifications.js",
+    "scripts": ["src/background/notifications.js"]
+  },
   "action": {
     "default_title": "Better NTS: player style",
     "default_popup": "src/popup/popup.html",
@@ -31,9 +36,14 @@
       "js": ["src/content/player.js"],
       "run_at": "document_idle",
       "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.nts.live/*", "https://nts.live/*"],
+      "js": ["src/content/session-bridge.js"],
+      "run_at": "document_idle"
     }
   ],
-  "minimum_chrome_version": "111",
+  "minimum_chrome_version": "121",
   "browser_specific_settings": {
     "gecko": {
       "id": "better-nts@nxkiss",

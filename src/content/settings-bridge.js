@@ -4,6 +4,7 @@
 // player.js (in the page's world) can't. It mirrors the settings onto <html>:
 //   data-bnts-mode="..."       the player style, changed from the toolbar popup or the player's menu
 //   data-bnts-new-tab="on|off" options, changed from the Options section of the player's menu
+//   data-bnts-notify="on|off"  new episode notifications, from the player's menu or the toolbar popup
 
 (() => {
   'use strict';
@@ -68,6 +69,7 @@
   // On/off options. player.js asks for a change with the "bnts:set-option" event.
   const OPTIONS = {
     newTabClick: { attribute: 'bntsNewTab', fallback: true },
+    newEpisodeNotifications: { attribute: 'bntsNotify', fallback: false },
   };
 
   function applyOption(key, value) {
