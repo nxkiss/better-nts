@@ -8,13 +8,14 @@ Browser extension that improves the episode player on [nts.live](https://www.nts
 - Track markers on the progress bar
 - Keyboard shortcuts (press `?` in the player)
 - Ctrl+click (or middle-click) a show or episode to open it in a new tab (can be turned off in the player)
+- Desktop notifications when a show you follow has a new episode (off by default, switch it on from the extension icon or the player)
 - Optional redesigned layout, switch styles from the extension icon
 
 ## Install
 
 Not on the extension stores, so load it yourself. Grab the latest `better-nts-x.y.z.zip` from [Releases](https://github.com/nxkiss/better-nts/releases) and unzip it somewhere you'll keep it (the browser loads it from that folder). You can also clone the repo instead.
 
-**Chrome / Edge / Brave** (version 111+)
+**Chrome / Edge / Brave** (version 121+)
 
 1. Go to `chrome://extensions` and turn on Developer mode.
 2. Click "Load unpacked" and pick the unzipped folder (the one with `manifest.json` in it).

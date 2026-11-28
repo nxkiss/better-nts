@@ -347,8 +347,9 @@
   }
 
   // Options other than the style live in extension storage too; settings-bridge.js mirrors each one
-  // onto <html> (data-bnts-new-tab="on|off") and saves changes asked for with "bnts:set-option".
+  // onto <html> (data-bnts-new-tab, data-bnts-notify: "on|off") and saves changes asked for with "bnts:set-option".
   const newTabClickOn = () => document.documentElement.dataset.bntsNewTab !== 'off';
+  const notificationsOn = () => document.documentElement.dataset.bntsNotify === 'on';
 
   function setOption(key, value) {
     document.dispatchEvent(new CustomEvent('bnts:set-option', { detail: { key, value } }));
@@ -357,6 +358,7 @@
   function showModeMenu(anchor) {
     const current = getMode();
     const newTab = newTabClickOn();
+    const notify = notificationsOn();
     showMenu(anchor, 'Player style and options', [
       { heading: 'Player style' },
       ...MODES.map((m) => ({
@@ -379,6 +381,15 @@
         onSelect: () => {
           setOption('newTabClick', !newTab);
           snackbar(newTab ? 'Ctrl+click opens in new tab: off' : 'Ctrl+click opens in new tab: on');
+        },
+      },
+      {
+        label: 'New episode notifications',
+        checked: notify,
+        checkbox: true,
+        onSelect: () => {
+          setOption('newEpisodeNotifications', !notify);
+          snackbar(notify ? 'New episode notifications: off' : 'New episode notifications: on');
         },
       },
     ]);
